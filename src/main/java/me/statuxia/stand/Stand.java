@@ -1,5 +1,6 @@
 package me.statuxia.stand;
 
+import me.statuxia.armorstandsaver.ArmorStandSaver;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
@@ -34,9 +35,8 @@ public class Stand {
         load(path, null);
     }
 
-    @Nullable
     public ArmorStand load(String path, Location location) {
-        File file = new File("plugins/ArmorStandSaver/", path);
+        File file = new File(ArmorStandSaver.getInstance().getDataFolder(), path);
         if (!file.exists()) {
             return null;
         }
@@ -66,9 +66,9 @@ public class Stand {
 
         String defaultName = "stand";
         int count = 0;
-        File file = new File("plugins/ArmorStandSaver/", defaultName + ".txt");
+        File file = new File(ArmorStandSaver.getInstance().getDataFolder(), defaultName + ".txt");
         while (file.exists()) {
-            file = new File("plugins/ArmorStandSaver/", defaultName + "_" + count++ + ".txt");
+            file = new File(ArmorStandSaver.getInstance().getDataFolder(), defaultName + "_" + count++ + ".txt");
         }
         configuration = YamlConfiguration.loadConfiguration(file);
 

@@ -4,8 +4,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ArmorStandSaver extends JavaPlugin {
 
+    private static ArmorStandSaver INSTANCE;
+
     @Override
     public void onEnable() {
+        INSTANCE = this;
         // Plugin startup logic
 
     }
@@ -13,5 +16,9 @@ public final class ArmorStandSaver extends JavaPlugin {
     @Override
     public void onDisable() {
         // Plugin shutdown logic
+    }
+
+    public static ArmorStandSaver getInstance() {
+        return INSTANCE;
     }
 }
