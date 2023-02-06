@@ -1,0 +1,6 @@
+name: ArmorStandSaver
+version: '${version}'
+main: me.statuxia.armorstandsaver.ArmorStandSaver
+api-version: 1.19
+authors: [ Statuxia ]
+description: A util for saving and load your armor stands
