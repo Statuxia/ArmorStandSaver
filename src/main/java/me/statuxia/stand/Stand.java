@@ -3,7 +3,6 @@ package me.statuxia.stand;
 import me.statuxia.armorstandsaver.ArmorStandSaver;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
@@ -11,83 +10,64 @@ import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.EulerAngle;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class Stand {
 
-    ArmorStand stand;
-    YamlConfiguration configuration;
-
-    public Stand(ArmorStand stand) {
-        this.stand = stand;
-    }
-
-    public Stand(String path, Location location) {
-        load(path, location);
-    }
-
-    public Stand(String path) {
-        load(path, null);
-    }
-
-    public ArmorStand load(String path, Location location) {
+    /**
+     * Loads an ArmorStand from a file.
+     *
+     * @param path     - file name (not path).
+     * @param location - position the player wants to use.
+     *
+     * @return ArmorStand as entity or null.
+     */
+    @Nullable
+    public static ArmorStand loadFromFile(@NotNull String path, @Nullable Location location) {
         File file = new File(ArmorStandSaver.getInstance().getDataFolder(), path);
         if (!file.exists()) {
+            Bukkit.getConsoleSender().sendMessage("§cFile not exists");
             return null;
         }
-        configuration = YamlConfiguration.loadConfiguration(file);
-        if (location == null) {
-            location = loadLocation();
-            if (location == null) {
-                return null;
-            }
-        }
-        String standName = configuration.getString("name");
+        YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
 
-        stand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
+        String standName = configuration.getString("standName");
+        List<String> standSettings = configuration.getStringList("standSettings");
+        List<String> standPoses = configuration.getStringList("standPoses");
+        List<String> standDisabledSlots = configuration.getStringList("standDisabledSlots");
+
+        if (location == null) {
+            location = configuration.getLocation("standLocation");
+        }
+        if (location == null || location.getWorld() == null) {
+            Bukkit.getConsoleSender().sendMessage("§cLocation is undefined");
+            return null;
+        }
+
+        ArmorStand stand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
+        loadSettings(stand, standSettings);
         stand.setCustomName(standName);
-        loadPoses();
-        loadSettings();
-        loadEquipment();
-        loadDisabledSlots();
+        loadPoses(stand, standPoses);
+        loadDisabledSlots(stand, standDisabledSlots);
+
+        EntityEquipment equipment = stand.getEquipment();
+        if (equipment == null) {
+            Bukkit.getConsoleSender().sendMessage("§cStand equipment is null");
+            return null;
+        }
+        loadEquipment(stand.getEquipment(), configuration);
+
+        Bukkit.getConsoleSender().sendMessage("§aStand successfully loaded and spawned");
         return stand;
     }
 
-    public void save() {
-        if (stand == null) {
-            Bukkit.getConsoleSender().sendMessage("§cStand for save is null");
-            return;
-        }
-
-        String defaultName = "stand";
-        int count = 0;
-        File file = new File(ArmorStandSaver.getInstance().getDataFolder(), defaultName + ".txt");
-        while (file.exists()) {
-            file = new File(ArmorStandSaver.getInstance().getDataFolder(), defaultName + "_" + count++ + ".txt");
-        }
-        configuration = YamlConfiguration.loadConfiguration(file);
-
-        configuration.set("name", stand.getName());
-        configuration.set("settings", saveSettings());
-        configuration.set("poses", savePoses());
-        configuration.set("location", stand.getLocation());
-        saveEquipment();
-        configuration.set("disabledSlots", saveDisabledSlots());
-
-        try {
-            configuration.save(file);
-        } catch (Throwable throwable) {
-            throwable.printStackTrace();
-        }
-    }
-
-    private void loadSettings() {
-        for (String rawSettings : configuration.getStringList("settings")) {
+    private static void loadSettings(@NotNull ArmorStand stand, @NotNull List<String> standSettings) {
+        for (String rawSettings : standSettings) {
             String[] rawSettingsString = rawSettings.split(":");
             switch (StandSettings.valueOf(rawSettingsString[0])) {
                 case NAME_VISIBLE -> stand.setCustomNameVisible(Boolean.parseBoolean(rawSettingsString[1]));
@@ -103,11 +83,14 @@ public class Stand {
         }
     }
 
-    private void loadPoses() {
-        for (String rawPose : configuration.getStringList("poses")) {
+    private static void loadPoses(@NotNull ArmorStand stand, @NotNull List<String> standPoses) {
+        for (String rawPose : standPoses) {
             String[] rawPoseString = rawPose.split(":");
             String[] angles = rawPoseString[1].split(",");
-            EulerAngle angle = new EulerAngle(Double.parseDouble(angles[0]), Double.parseDouble(angles[1]), Double.parseDouble(angles[2]));
+            EulerAngle angle = new EulerAngle(
+                    Double.parseDouble(angles[0]),
+                    Double.parseDouble(angles[1]),
+                    Double.parseDouble(angles[2]));
             switch (StandPose.valueOf(rawPoseString[0])) {
                 case HEAD -> stand.setHeadPose(angle);
                 case LEFT_ARM -> stand.setLeftArmPose(angle);
@@ -119,45 +102,15 @@ public class Stand {
         }
     }
 
-    @Nullable
-    private Location loadLocation() {
-        Location location = configuration.getLocation("location");
-        if (location != null) {
-            return location;
-        }
-        String[] rawLocation = configuration.getStringList("location").get(0).split(":");
-        String[] stringLocation = rawLocation[1].split(",");
-        Float[] floats = Arrays.stream(stringLocation).map(Float::valueOf).toArray(Float[]::new);
-        World world = Bukkit.getWorld(rawLocation[0]) == null ? Bukkit.getWorlds().get(0) : Bukkit.getWorld(rawLocation[0]);
-
-        switch (floats.length) {
-            case 3 -> {
-                return new Location(world, floats[0], floats[1], floats[2]);
-            }
-            case 5 -> {
-                return new Location(world, floats[0], floats[1], floats[2], floats[3], floats[4]);
-            }
-            default -> {
-                return null;
-            }
-        }
-    }
-
-    private void loadEquipment() {
-        EntityEquipment equipment = stand.getEquipment();
-        if (equipment == null) {
-            return;
-        }
+    private static void loadEquipment(@NotNull EntityEquipment equipment, @NotNull YamlConfiguration configuration) {
         for (EquipmentSlot equipmentSlot : EquipmentSlot.values()) {
             ItemStack item = configuration.getItemStack(equipmentSlot.name());
             equipment.setItem(equipmentSlot, item);
         }
     }
 
-    private void loadDisabledSlots() {
-        List<String> rawDisabledSlots = configuration.getStringList("disabledSlots");
-
-        for (String rawDisabledSlot : rawDisabledSlots) {
+    private static void loadDisabledSlots(ArmorStand stand, List<String> standDisabledSlots) {
+        for (String rawDisabledSlot : standDisabledSlots) {
             String[] rawDisabledSlotString = rawDisabledSlot.split(":");
             String[] rawDisabledSlotTypeString = rawDisabledSlotString[1].split(",");
             if (Boolean.parseBoolean(rawDisabledSlotTypeString[1])) {
@@ -166,7 +119,41 @@ public class Stand {
         }
     }
 
-    private List<String> saveSettings() {
+    /**
+     * Saves ArmorStand to the file.
+     *
+     * @param stand - ArmorStand to save.
+     *
+     * @return true or false depending on whether the file was saved.
+     */
+    public static boolean saveToFile(@NotNull ArmorStand stand) {
+        String defaultName = "stand";
+        int count = 0;
+        File file = new File(ArmorStandSaver.getInstance().getDataFolder(), defaultName + ".txt");
+        while (file.exists()) {
+            file = new File(ArmorStandSaver.getInstance().getDataFolder(), defaultName + "_" + count++ + ".txt");
+        }
+        YamlConfiguration configuration = YamlConfiguration.loadConfiguration(file);
+
+        configuration.set("standName", stand.getName());
+        configuration.set("standSettings", saveSettings(stand));
+        configuration.set("standPoses", savePoses(stand));
+        configuration.set("standLocation", stand.getLocation());
+        configuration.set("standDisabledSlots", saveDisabledSlots(stand));
+        saveEquipment(stand, configuration);
+
+        try {
+            configuration.save(file);
+            Bukkit.getConsoleSender().sendMessage("§aStand successfully saved as §e" + file.getName());
+            return true;
+        } catch (Throwable throwable) {
+            throwable.printStackTrace();
+            Bukkit.getConsoleSender().sendMessage("§cAn error occurred while saving the file");
+            return false;
+        }
+    }
+
+    private static List<String> saveSettings(@NotNull ArmorStand stand) {
         List<String> save = new ArrayList<>();
         save.add(StandSettings.NAME_VISIBLE.name() + ":" + stand.isCustomNameVisible());
         save.add(StandSettings.VISIBLE.name() + ":" + stand.isVisible());
@@ -181,7 +168,7 @@ public class Stand {
         return save;
     }
 
-    private List<String> savePoses() {
+    private static List<String> savePoses(@NotNull ArmorStand stand) {
         List<String> save = new ArrayList<>();
         StandPose[] poses = StandPose.values();
         EulerAngle[] angles = new EulerAngle[]{stand.getHeadPose(), stand.getLeftArmPose(), stand.getRightArmPose(), stand.getLeftLegPose(), stand.getRightLegPose(), stand.getBodyPose()};
@@ -192,7 +179,7 @@ public class Stand {
         return save;
     }
 
-    private void saveEquipment() {
+    private static void saveEquipment(@NotNull ArmorStand stand, @NotNull YamlConfiguration configuration) {
 
         EntityEquipment e = stand.getEquipment();
 
@@ -205,7 +192,7 @@ public class Stand {
         }
     }
 
-    private List<String> saveDisabledSlots() {
+    private static List<String> saveDisabledSlots(@NotNull ArmorStand stand) {
         List<String> save = new ArrayList<>();
 
         for (EquipmentSlot slot : EquipmentSlot.values()) {
